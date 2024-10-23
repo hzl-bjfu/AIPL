@@ -1,0 +1,1 @@
+Epoch	Total Loss	Softmax Loss	Center Loss	train Acc.	
