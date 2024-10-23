@@ -6,7 +6,7 @@ This repository contains the code for the paper titled "Cross-corpus open set bi
 
 This project aims to recognize bird species across different corpora using vocalization data. The code provided here is designed to facilitate research in the field of bioacoustics and machine learning, particularly in the area of open-set recognition for bird species.
 
-## Citationhttps://github.com/hzl-bjfu/AIPL/tree/master
+## Citationhttps: //github.com/hzl-bjfu/AIPL
 If you find this code useful for your research, please cite the following paper:
 
 ```latex
