@@ -1,0 +1,18 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# COCO 2017 dataset http://cocodataset.org by Microsoft
+# Example usage: python train.py --data coco.yaml
+# parent
+# ├── yolov5
+# └── datasets
+#     └── coco  ← downloads here (20.1 GB)
+
+
+train:  D:\cfy_mistake_triggerimages\train # train images (relative to 'path') 118287 images
+val:  D:\cfy_mistake_trigger\images\val # val images (relative to 'path') 5000 images
+test: D:\cfy_mistake_trigger\ images\test # 20288 of 40670 images, submit to https://competitions.codalab.org/competitions/20794
+
+# Classes
+names:
+  0: no
+  1: have
