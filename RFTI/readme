@@ -1,1 +1,3 @@
-Metric Learning Unveiling Disparities: A Novel Approach to Recognize False Trigger Images in Wildlife Monitoring
+This is the code for our paper "Metric Learning Unveiling Disparities: A Novel Approach to Recognize False Trigger Images in Wildlife Monitoring," published in Ecological Informatics. 
+The code includes three folders: classification (for the classification model), objection (for object detection), and contrastiveLearn (for the metric learning model).
+In accordance with the regulations on data management issued by the Chinese government, the dataset for this paper will be sent via a download link only after a request is made and an agreement for academic use only is signed. We appreciate your understanding.
