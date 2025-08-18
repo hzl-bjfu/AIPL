@@ -1,0 +1,92 @@
+# R code 1.acoustic_indices_calculation R 声学指数计算 （注意根据需求，调整声学指数的频率大小，通常BIO和ACI是调整为min=2k，数据量大记得改no_cores）
+
+# 加载所需的包
+library(seewave)
+library(tuneR)
+library(soundecology)
+library(stringr)
+
+# 指定包含音频文件的多个文件夹路径
+filtered_audio_folders <- c(
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXA005_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXB004_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXB005_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXB006_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXC004_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXC005_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXC006_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXC007_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXD003_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXD004_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXD005_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXD006_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXE003_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXE004_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXE005_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXE006_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXE007_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXF003_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXF004_cut",
+  "/media/ps/Elements1/谢老师组_绿心公园/北京城市绿心森林公园/cut/LXF005_cut"
+)
+
+# 定义一个函数来计算声学指标（带前缀的文件名）
+calculate_acoustic_indices <- function(folder) {
+  # 从文件夹路径中提取前缀（如 "LXA005"）
+  folder_name <- basename(folder)               # 获取 "LXA005_cut"
+  prefix <- str_replace(folder_name, "_cut$", "") # 移除 "_cut" 得到 "LXA005"
+  
+  # 计算ACI（输出文件示例：LXA005ACI.csv）
+  ACI_result <- multiple_sounds(
+    directory = folder,
+    resultfile = paste0(folder, "/", prefix, "ACI.csv"),  # 修改文件名
+    soundindex = "acoustic_complexity", 
+    min_freq = 2000, max_freq = 11000, no_cores = 26
+  )
+  
+  # 计算ADI（输出文件示例：LXA005ADI.csv）
+  ADI_result <- multiple_sounds(
+    directory = folder,
+    resultfile = paste0(folder, "/", prefix, "ADI.csv"),  # 修改文件名
+    soundindex = "acoustic_diversity", 
+    max_freq = 11000, db_threshold = -50, freq_step = 1000, no_cores = 26
+  )
+  
+  # 计算AEI（输出文件示例：LXA005AEI.csv）
+  AEI_result <- multiple_sounds(
+    directory = folder,
+    resultfile = paste0(folder, "/", prefix, "AEI.csv"),  # 修改文件名
+    soundindex = "acoustic_evenness", 
+    max_freq = 11000, db_threshold = -50, freq_step = 1000, no_cores = 26
+  )
+  
+  # 计算BIO（输出文件示例：LXA005BIO.csv）
+  BIO_result <- multiple_sounds(
+    directory = folder,
+    resultfile = paste0(folder, "/", prefix, "BIO.csv"),  # 修改文件名
+    soundindex = "bioacoustic_index", 
+    min_freq = 2000, max_freq = 11000, no_cores = 26
+  )
+  
+  # 计算NDSI（输出文件示例：LXA005NDSI.csv）
+  NDSI_result <- multiple_sounds(
+    directory = folder,
+    resultfile = paste0(folder, "/", prefix, "NDSI.csv"),  # 修改文件名
+    soundindex = "ndsi", 
+    fft_w = 1024, anthro_min = 1000, anthro_max = 2000, 
+    bio_min = 2000, bio_max = 11000, no_cores = 26
+  )
+  
+  # 计算H（输出文件示例：LXA005H.csv）
+  H_result <- multiple_sounds(
+    directory = folder,
+    resultfile = paste0(folder, "/", prefix, "H.csv"),  # 修改文件名
+    soundindex = "H",
+    no_cores = 26
+  )
+}
+
+# 遍历每个文件夹并计算声学指标
+for (folder in filtered_audio_folders) {
+  calculate_acoustic_indices(folder)
+}

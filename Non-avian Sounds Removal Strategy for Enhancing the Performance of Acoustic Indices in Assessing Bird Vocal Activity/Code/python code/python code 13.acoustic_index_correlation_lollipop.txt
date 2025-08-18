@@ -1,0 +1,37 @@
+# 剔除后的6类指数的相关性（lollipop图-棒棒糖图）（3.3.1） python code 13.acoustic_index_correlation_lollipop
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 示例数据
+data = {
+    'Index': ['ACI', 'ADI', 'AEI', 'BIO', 'H', 'NDSI'],
+    'Spearman': [0.358, 0.359, -0.345, 0.343, 0.237, 0.420]
+}
+df = pd.DataFrame(data)
+
+# 根据 Spearman 绝对值排序
+df['abs_corr'] = df['Spearman'].abs()
+df = df.sort_values('abs_corr', ascending=True)
+
+fig, ax = plt.subplots(figsize=(8, 4))
+
+# 线段：从 0 到 Spearman（支持负值）
+xmin = df['Spearman'].apply(lambda x: min(0, x))
+xmax = df['Spearman'].apply(lambda x: max(0, x))
+ax.hlines(y=df['Index'], xmin=xmin, xmax=xmax, color='C1', linewidth=2)
+
+# 圆点
+ax.scatter(df['Spearman'], df['Index'], color='C1', s=100, marker='o')
+
+# 根据数据自动扩展 x 轴范围
+margin = 0.05
+ax.set_xlim(df['Spearman'].min() - margin, df['Spearman'].max() + margin)
+
+# 设置标签和样式
+ax.set_xlabel('Spearman correlation', fontsize=16)
+ax.set_ylabel('Acoustic index', fontsize=16)
+ax.tick_params(axis='both', which='major', labelsize=14)
+ax.grid(axis='x', linestyle='--', alpha=0.5)
+
+plt.tight_layout()
+plt.show()
