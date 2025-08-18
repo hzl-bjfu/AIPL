@@ -1,0 +1,79 @@
+# 不同剔除策略的声景-声学指数相关性热力图（3.2） python code 11.soundscape_acoustic_corr_heatmap_strategies
+import math
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# 1. Excel 文件路径
+file_path = r"E:\谢老师组内每周汇报\整合动物学\鸟声相关系数矩阵统合.xlsx"
+
+# 2. 读取数据
+df = pd.read_excel(file_path)
+
+# 3. 清洗 Soundscape 列：去掉所有 “ Sum” 后缀
+df['Soundscape'] = df['Soundscape'].str.replace(r'\s*Sum$', '', regex=True)
+
+# 4. 定义统一的行、列顺序
+row_order = ['Anthrophony', 'Avain', 'Insect', 'Geophony', 'Silence']
+col_order = ['ACI', 'ADI', 'AEI', 'BIO', 'H', 'NDSI']
+
+# 5. 提取所有策略
+strategies = df['Strategy'].unique().tolist()
+
+# 6. 创建 2 列 3 行 子图，不共享坐标轴
+n = len(strategies)    # 6 个策略
+cols = 2
+rows = 3
+fig, axes = plt.subplots(rows, cols,
+                         figsize=(cols * 6, rows * 4),
+                         constrained_layout=True)
+
+# 7. 循环绘图并加边框 & 保证每个子图都有完整 y 轴标签
+for ax, strat in zip(axes.flat, strategies):
+    sub = (df[df['Strategy'] == strat]
+           .set_index('Soundscape')
+           .reindex(index=row_order)[col_order])
+
+    sns.heatmap(sub, ax=ax,
+                vmin=-1, vmax=1, center=0,
+                cmap='RdBu',
+                annot=True, fmt='.3f',      # <-- 三位小数格式
+                cbar=False)
+
+    # 显式打开四条边框
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_edgecolor('black')
+        spine.set_linewidth(1)
+
+    # 每个子图都设置完整的 y 轴 tick 和 label
+    ax.set_yticks([i + 0.5 for i in range(len(row_order))])
+    ax.set_yticklabels(row_order, rotation=0, fontsize=9)
+    ax.set_ylabel(None)
+
+    # 同理，x 轴也手动设置
+    ax.set_xticks([i + 0.5 for i in range(len(col_order))])
+    ax.set_xticklabels(col_order, rotation=45, ha='right', fontsize=9)
+
+    ax.set_title(strat, fontsize=10, pad=10)
+
+# 8. 添加统一 colorbar
+norm = plt.Normalize(-1, 1)
+sm = plt.cm.ScalarMappable(cmap='RdBu', norm=norm)
+sm.set_array([])
+fig.colorbar(sm,
+             ax=axes.ravel().tolist(),
+             orientation='vertical',
+             fraction=0.02, pad=0.02,
+             label='Spearman correlation')
+
+# 9. 隐藏多余子图
+for ax in axes.flat[n:]:
+    ax.axis('off')
+
+plt.suptitle(
+    'Spearman correlation between acoustic indices\n'
+    'and soundscape categories under different filtering strategies',
+    y=1.02, fontsize=0
+)
+plt.show()

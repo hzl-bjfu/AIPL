@@ -1,0 +1,82 @@
+# 相关性矩阵（终）（可计算p值） python code 10.compute_spearman_correlation
+import pandas as pd
+from scipy.stats import spearmanr
+
+def compute_spearman_correlation(input_excel, output_excel=None):
+    """
+    读取含有声景事件和声学指数的数据表，计算 Spearman 相关系数矩阵及 p 值矩阵，
+    保留相关系数至三位小数，p 值全部用小数显示，并在结果中标注显著性：
+    ** 表示 p < 0.01，* 表示 p < 0.05。
+    并可选将矩阵输出到 Excel 的三个 Sheet：'rho'、'pvalue'、'annotated'.
+
+    :param input_excel:  数据表的 Excel 文件路径
+    :param output_excel: 输出文件路径，可选；若指定则生成多个 Sheet
+    """
+    # 1. 读取数据
+    df = pd.read_excel(input_excel)
+
+    # 2. 要分析的列
+    cols = [
+        "Anthrophony",    # 人源声音统计
+        "Avain Sum",      # 鸟声统计
+        "Insect Sum",     # 昆虫声统计
+        "Geophony Sum",   # 地理环境声统计
+        "Silence Sum",    # 静音统计
+        "ACI",
+        "ADI",
+        "AEI",
+        "BIO",
+        "H",
+        "NDSI"
+    ]
+    sub_df = df[cols].copy()
+
+    # 3. 计算 Spearman 相关系数矩阵（ρ）并保留三位小数
+    rho_mat = sub_df.corr(method='spearman').round(3)
+
+    # 4. 计算 p 值矩阵并保留四位小数
+    p_mat = pd.DataFrame(index=cols, columns=cols, dtype=float)
+    for i in cols:
+        for j in cols:
+            if i == j:
+                p_mat.loc[i, j] = 0.0
+            else:
+                _, p = spearmanr(sub_df[i], sub_df[j], nan_policy='omit')
+                p_mat.loc[i, j] = p
+    p_mat = p_mat.round(4)
+
+    # 5. 构建带显著性标注的相关系数矩阵
+    annotated = pd.DataFrame(index=cols, columns=cols, dtype=object)
+    for i in cols:
+        for j in cols:
+            rho_val = rho_mat.loc[i, j]
+            p_val = p_mat.loc[i, j]
+            # 添加显著性标注
+            sig = ''
+            if p_val < 0.01:
+                sig = '**'
+            elif p_val < 0.05:
+                sig = '*'
+            annotated.loc[i, j] = f"{rho_val:.3f}{sig}"
+
+    # 6. 输出到屏幕
+    print("Spearman 相关系数矩阵 (ρ)：")
+    print(rho_mat)
+    print("\nSpearman p 值矩阵：")
+    print(p_mat)
+    print("\n带显著性标注的相关系数矩阵：")
+    print(annotated)
+
+    # 7. 如需写入 Excel，可以在不同 Sheet 保存 ρ、p-value 和 annotated
+    if output_excel:
+        with pd.ExcelWriter(output_excel) as writer:
+            rho_mat.to_excel(writer, sheet_name='rho', index=True)
+            p_mat.to_excel(writer, sheet_name='pvalue', index=True)
+            annotated.to_excel(writer, sheet_name='annotated', index=True)
+        print(f"\n结果已保存至: {output_excel} （Sheets: 'rho'、'pvalue'、'annotated'）")
+
+
+if __name__ == "__main__":
+    input_file  = r"E:\voice_data\统计分析\鸟虫地.xlsx"
+    output_file = r"E:\voice_data\统计分析\spearman_corr_matrix_鸟虫地2.xlsx"  # 不需要可设为 None
+    compute_spearman_correlation(input_excel=input_file, output_excel=output_file)

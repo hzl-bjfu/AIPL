@@ -1,0 +1,179 @@
+# 平衡点计算（去除相关性权重版）python code 14.non_avian_removal_threshold_calc
+import os
+import re
+import pandas as pd
+import numpy as np
+from datetime import datetime
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+
+# -------------------------------
+# 设置 matplotlib 使用中文宋体（SimSun）
+# -------------------------------
+plt.rcParams['font.sans-serif'] = ['SimSun']
+plt.rcParams['axes.unicode_minus'] = False
+
+# -------------------------------
+# 参数设置
+# -------------------------------
+drop_prob = 0.2
+time_weights = {'夜间': 0.04, '黎明': 0.32, '白天': 0.32, '黄昏': 0.32}
+# Score 组合权重
+alpha, beta = 0.9, 0.1
+
+# -------------------------------
+# 1. 读取数据
+# -------------------------------
+xlsx_file = r"E:\voice_data\统计分析\统计分析.xlsx"
+df = pd.read_excel(xlsx_file)
+
+# -------------------------------
+# 2. 提取“Big Audio”中的时间信息
+# -------------------------------
+df['filename'] = df['Big Audio'].apply(os.path.basename)
+
+def extract_datetime_str(fn):
+    m = re.search(r'.*_(\d{8})_(\d{4,6})', fn)
+    if not m:
+        return None
+    date, t = m.group(1), m.group(2)
+    if len(t) == 4:
+        t += "00"
+    return date + t
+
+df['datetime_str'] = df['filename'].apply(extract_datetime_str)
+df['datetime_full'] = pd.to_datetime(
+    df['datetime_str'], format="%Y%m%d%H%M%S", errors='coerce'
+)
+df['hour_decimal'] = df['datetime_full'].dt.hour + df['datetime_full'].dt.minute / 60
+
+# -------------------------------
+# 3. 按小时分类时间段
+# -------------------------------
+def get_time_category(h):
+    if pd.isna(h):
+        return "未知"
+    if (0 <= h < 5.5) or (18.5 <= h < 24):
+        return "夜间"
+    if 5.5 <= h < 8:
+        return "黎明"
+    if 8 <= h < 16:
+        return "白天"
+    if 16 <= h < 18.5:
+        return "黄昏"
+    return "未知"
+
+df['time_cat'] = df['hour_decimal'].apply(get_time_category)
+
+# -------------------------------
+# 4. 原始各时段行数（用于剔除率计算）
+# -------------------------------
+total_original = len(df)
+time_cats = ['夜间', '黎明', '白天', '黄昏']
+orig_counts = {tc: df[df['time_cat'] == tc].shape[0] for tc in time_cats}
+
+# -------------------------------
+# 5. 遍历阈值组合、过滤、计算指标
+# -------------------------------
+results = []
+pbar = tqdm(total=16**3, desc='计算各组合指标')
+
+for th_h in range(16, 0, -1):
+    for th_i in range(16, 0, -1):
+        for th_g in range(16, 0, -1):
+            # 夜间严格过滤
+            mask_n = (
+                (df['time_cat'] == "夜间") &
+                (df['Anthrophony'] < th_h) &
+                (df['Insect Sum']  < th_i) &
+                (df['Geophony Sum'] < th_g)
+            )
+            df_n = df.loc[mask_n, :]
+
+            # 非夜间随机剔除
+            mask_nn = (
+                (df['time_cat'] != "夜间") &
+                (df['Anthrophony'] < th_h) &
+                (df['Insect Sum']  < th_i) &
+                (df['Geophony Sum'] < th_g)
+            )
+            keep = df.loc[mask_nn, :]
+            viol = df.loc[~mask_nn & (df['time_cat'] != "夜间"), :]
+            kept_viol = viol[np.random.rand(len(viol)) > drop_prob]
+            df_nn = pd.concat([keep, kept_viol])
+
+            # 合并结果
+            df_f = pd.concat([df_n, df_nn])
+
+            # 各时段剔除率
+            tr = {
+                tc: 0 if orig_counts[tc] == 0 else
+                    (orig_counts[tc] - df_f[df_f['time_cat'] == tc].shape[0]) / orig_counts[tc]
+                for tc in time_cats
+            }
+
+            # 计算 Spearman 相关
+            corr_ACI  = df_f["Avain Sum"].corr(df_f["ACI"],    method="spearman")
+            corr_ADI  = df_f["Avain Sum"].corr(df_f["ADI"],    method="spearman")
+            corr_AEI  = df_f["Avain Sum"].corr(df_f["AEI"],    method="spearman")
+            corr_BIO  = df_f["Avain Sum"].corr(df_f["BIO"],    method="spearman")
+            corr_H    = df_f["Avain Sum"].corr(df_f["H"],      method="spearman")
+            corr_NDSI = df_f["Avain Sum"].corr(df_f["NDSI"],   method="spearman")
+
+            # 简单平均相关度（不使用权重）
+            corrs = [corr_ACI, corr_ADI, corr_AEI, corr_BIO, corr_H, corr_NDSI]
+            avg_corr = np.mean([abs(c) for c in corrs])
+
+            # 保留率
+            retention = 1 - sum(time_weights[tc] * tr[tc] for tc in time_cats)
+
+            # 保存结果
+            results.append({
+                "Thresh_Anthro":   th_h,
+                "Thresh_Insect":   th_i,
+                "Thresh_Geophony": th_g,
+                "Removed_Overall": (total_original - len(df_f)) / total_original,
+                "Removed_Night":   tr['夜间'],
+                "Removed_Dawn":    tr['黎明'],
+                "Removed_Day":     tr['白天'],
+                "Removed_Dusk":    tr['黄昏'],
+                "Corr_ACI":        corr_ACI,
+                "Corr_ADI":        corr_ADI,
+                "Corr_AEI":        corr_AEI,
+                "Corr_BIO":        corr_BIO,
+                "Corr_H":          corr_H,
+                "Corr_NDSI":       corr_NDSI,
+                "Avg_Corr":        avg_corr,
+                "Retention":       retention
+            })
+
+            pbar.update(1)
+
+pbar.close()
+
+# -------------------------------
+# 6. 汇总、归一化、计算 Score、输出到 Excel
+# -------------------------------
+df_res = pd.DataFrame(results)
+
+# Min–Max 归一化
+df_res['Norm_Corr']      = (df_res['Avg_Corr'] - df_res['Avg_Corr'].min()) / \
+                          (df_res['Avg_Corr'].max() - df_res['Avg_Corr'].min())
+df_res['Norm_Retention'] = (df_res['Retention'] - df_res['Retention'].min()) / \
+                          (df_res['Retention'].max() - df_res['Retention'].min())
+
+# 计算综合得分
+df_res['Score'] = alpha * df_res['Norm_Corr'] + beta * df_res['Norm_Retention']
+
+# 写入 Excel（两张表）
+out_path = r"E:\voice_data\统计分析\阈值组合_去权重版.xlsx"
+with pd.ExcelWriter(out_path) as writer:
+    df_res.to_excel(writer, sheet_name='Normalized_and_Score', index=False)
+    df_res[
+        ["Removed_Overall","Removed_Night","Removed_Dawn",
+         "Removed_Day","Removed_Dusk",
+         "Corr_ACI","Corr_ADI","Corr_AEI",
+         "Corr_BIO","Corr_H","Corr_NDSI"]
+    ].to_excel(writer, sheet_name='Raw_Metrics', index=False)
+
+print("已保存至：", out_path)
