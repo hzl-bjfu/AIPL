@@ -1,0 +1,126 @@
+Overview
+--------
+This script provides a dataset generator for mixed bird-call audio. It creates 10-second mono WAV clips at a target sample rate, mixing audio from multiple bird species with optional background sounds. It also exports a CSV metadata file describing each mix and the time ranges for each inserted bird segment.
+
+Key Features
+------------
+- Mixes audio from N randomly chosen species per clip (supports overlapping).
+- Optional synthetic or real background audio: none, ambient, rain, wind, or real (from a folder of WAVs).
+- Random sub-clip extraction from source files for diversity (0.5s to the shorter of source/duration).
+- Simple re-sampling to the target sample rate and length handling.
+- Exports detailed metadata (CSV), including per-bird time intervals.
+
+Requirements
+------------
+- Python 3.8+
+- Libraries: `numpy`, `pandas`, `soundfile`
+- Local package/utilities: `evascape.Evascape.toolbox` providing: `waveread`, `addin`, `flatsound`, `bracket_ramp`.
+  - The script prepends `evascape/Evascape` to `sys.path`, relative to this file. Ensure that directory exists and contains the expected module structure.
+
+Expected Data Layout
+--------------------
+`bird_data_dir` should contain one subfolder per species. Each species folder contains audio files (`.wav` or `.mp3`). Example:
+
+```
+data/
+  data_2s_19_16000/
+    species_A/
+      a1.wav
+      a2.wav
+    species_B/
+      b1.wav
+    ...
+```
+
+If you use real backgrounds, point `background_dir` to a folder tree with `.wav` files anywhere inside.
+
+How It Works (High Level)
+-------------------------
+1. Build a simple catalog of all species and their audio files, recording durations and sample rates.
+2. For each requested mix:
+   - Randomly pick the number of species and their files.
+   - Generate a background track (`no_background`, `ambient_sound`, `rain`, `wind`, or random real WAV).
+   - For each chosen file, extract a random sub-clip, re-sample, pick a random start time, and add it into the canvas allowing overlaps.
+   - Save the mixed audio and write one row to `metadata.csv`.
+
+Outputs
+-------
+- Mixed audio files: `mix_XXXX.wav` in the output directory.
+- `metadata.csv` containing columns:
+  - `filename`: output WAV file name.
+  - `n_species`: number of species mixed.
+  - `species_list`: semicolon-separated species names.
+  - `background_type`: one of `no_background`, `ambient_sound`, `rain`, `wind`, `real`.
+  - `duration`: clip length in seconds.
+  - `sample_rate`: sample rate used in output.
+  - `bird_segments`: semicolon-separated entries like `species:start-end` (seconds, two decimals).
+
+Programmatic Usage
+------------------
+```python
+from generate_dataset import BirdMixDatasetGenerator
+
+generator = BirdMixDatasetGenerator(
+    bird_data_dir="data/data_2s_19_16000",
+    output_dir="bird_mix",
+    sample_rate=16000,
+    background_dir=None  # or a folder with real background WAVs
+)
+
+# Create one mixed file (returns metadata dict)
+metadata = generator.create_mixed_audio(
+    n_species=3,
+    duration=10,
+    background_type="ambient_sound",
+    filename="demo_mix.wav"
+)
+
+# Or bulk-generate a dataset with CSV metadata
+generator.generate_dataset(
+    n_mix=100,
+    min_species=2,
+    max_species=5,
+    duration=10,
+    species_choices=None  # e.g., [3, 5, 7] to constrain choices
+)
+```
+
+CLI Usage
+---------
+This file includes a `main()` with example parameters. Run directly:
+
+```bash
+python3 audio_separate/generate_dataset.py
+```
+
+Edit the constants in `main()` to point to your data and adjust counts/durations.
+
+Parameters (Core)
+-----------------
+- `BirdMixDatasetGenerator(bird_data_dir, output_dir, sample_rate=16000, background_dir=None)`
+  - `bird_data_dir`: path to species folders containing audio files.
+  - `output_dir`: where mixed audio and `metadata.csv` will be written.
+  - `sample_rate`: target sample rate for output (Hz).
+  - `background_dir`: optional folder with real background WAV files.
+
+- `create_mixed_audio(n_species, duration=10, background_type='no_background', filename='mixed_audio.wav')`
+  - Returns a dict with keys: `filename`, `species_list`, `n_species`, `duration`, `sample_rate`, `background_type`, `bird_segments`.
+
+- `generate_dataset(n_mix=100, min_species=2, max_species=5, duration=10, species_choices=None)`
+  - Generates multiple mixes and writes `metadata.csv`. If `species_choices` is provided (e.g., `[3, 5, 7]`), the number of species per mix is sampled from that set; otherwise a random integer in `[min_species, max_species]` is used.
+
+Background Types
+----------------
+- `no_background`: silence using `flatsound`.
+- `ambient_sound`: low-frequency biased synthetic noise.
+- `rain`: higher-frequency biased synthetic noise.
+- `wind`: mid-frequency biased synthetic noise.
+- `real`: randomly selected real WAV from `background_dir` (if provided); falls back to synthetic if read fails.
+
+Notes & Limitations
+-------------------
+- Re-sampling here is intentionally simple (repeat/stride). For higher fidelity, replace `_resample_audio` with a proper resampler (e.g., `resampy`, `scipy.signal.resample_poly`).
+- Stereo inputs are down-mixed to mono by averaging channels.
+- Random placement may clip segments at the canvas end to fit within the duration.
+- Ensure `evascape` utilities (`addin`, etc.) are importable; the script injects `evascape/Evascape` into `sys.path` relative to this file.
+"""
