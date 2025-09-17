@@ -1,24 +1,6 @@
-# Cross-Corpus Open Set Bird Species Recognition by Vocalization
+# MEDIAL
 
-This repository contains the code for the paper titled "Cross-corpus open set bird species recognition by vocalization" by Xie, Jiangjian et al., published in Ecological Indicators, Volume 154, 2023, by Elsevier.
-
-## Overview
-
-This project aims to recognize bird species using vocalization data. The code provided here is designed to facilitate research in the field of bioacoustics and machine learning, particularly in the area of open-set recognition for bird species.
-
-## Citation
-If you find this code useful for your research, please cite the following paper:
-
-```latex
-@article{xie2023cross,
-  title={Cross-corpus open set bird species recognition by vocalization},
-  author={Xie, Jiangjian and Zhang, Luyang and Zhang, Junguo and Zhang, Yanyun and Schuller, Bj{\"o}rn W},
-  journal={Ecological Indicators},
-  volume={154},
-  pages={110826},
-  year={2023},
-  publisher={Elsevier}
-}
+Located in the School of Technology, Beijing Forestry University, the Multi - modal Ecological Data Intelligent Analysis Laboratory (MEDIAL) is dedicated to advancing research in the field of ecological data analysis through multi - modal approaches. Our work encompasses various aspects such as data preprocessing, the development and application of advanced algorithms like TDNN (Time - Delay Neural Network) and RFTI (Relevant Field and Target Identification), open - set recognition techniques, and strategies for enhancing ecological sound data by removing non - avian sounds. We strive to leverage intelligent methods to gain deeper insights into ecological systems and contribute to ecological research and conservation efforts.
 
 ## Contact
 For any questions or further information, please reach out to:
