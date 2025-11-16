@@ -1,0 +1,32 @@
+# 各时间段的剔除率条形图（3.3.1）python code 12.removal_rate_barplot_by_period
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 数据准备
+data = {
+    'Period': ['Night', 'Dawn', 'Day', 'Dusk'],
+    'Removed Rate': [0.712, 0.080, 0.117, 0.118]
+}
+df = pd.DataFrame(data)
+overall_rate = 0.386  # Overall 剔除率
+
+# 绘制水平条形图，并添加 Overall 参考线
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.bar(df['Period'], df['Removed Rate'] * 100, color='C1')
+
+# 将虚线改为红色
+ax.axhline(overall_rate * 100,
+           color='red',         # 红色虚线
+           linestyle='--',
+           linewidth=2,
+           label=f'Overall: {overall_rate * 100:.1f}%')
+
+# 添加标签、标题和图例
+ax.set_ylabel('Removed Rate (%)', fontsize=16)
+ax.set_xlabel('Time Period', fontsize=16)
+ax.legend(fontsize=14)
+ax.grid(axis='x', linestyle='--', alpha=0.5)
+ax.tick_params(labelsize=14)
+
+plt.tight_layout()
+plt.show()

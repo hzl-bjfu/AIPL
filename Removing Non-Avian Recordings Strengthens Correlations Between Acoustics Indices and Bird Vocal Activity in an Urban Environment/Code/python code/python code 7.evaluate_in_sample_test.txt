@@ -1,0 +1,290 @@
+# 同源测试集用（终）（英文版） python code 7.evaluate_in_sample_test
+import os
+import numpy as np
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader, Dataset
+from torchvision import models
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+import math
+import pandas as pd  # 用于保存 Excel 文件
+
+from sklearn.metrics import confusion_matrix, classification_report, multilabel_confusion_matrix
+
+##############################
+# 1. 定义测试集 Dataset 类（多标签版）
+##############################
+class NumpyDatasetTestMultiLabel(Dataset):
+    """
+    从目录 (test_dir) 读取 .npy 文件，
+    根据文件夹名解析多标签，返回 (图像Tensor, 多标签Tensor, 文件名)。
+    基本标签: ["Anthrophony", "Avain", "Insect", "Geophony", "Silence"]
+    组合文件夹包括：Anthrophony_Avain, Anthrophony_Insect, ... 等
+    """
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+
+        # 定义 5 个基本标签
+        self.base_labels = ["Anthrophony", "Avain", "Insect", "Geophony", "Silence"]
+
+        # 有效文件夹列表
+        self.valid_folders = [
+            "Anthrophony",
+            "Avain",
+            "Insect",
+            "Geophony",
+            "Silence",
+            "Anthrophony_Avain",
+            "Anthrophony_Geophony",
+            "Anthrophony_Insect",
+            "Avain_Geophony",
+            "Avain_Insect",
+            "Insect_Geophony",
+            "Anthrophony_Avain_Insect",
+            "Anthrophony_Insect_Geophony"
+        ]
+
+        self.files = []
+        for current_dir, _, files in os.walk(root_dir):
+            folder_name = os.path.basename(current_dir)
+            if folder_name in self.valid_folders:
+                for f in files:
+                    if f.lower().endswith('.npy'):
+                        self.files.append(os.path.join(current_dir, f))
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        file_path = self.files[idx]
+        data = np.load(file_path)  # 假设 shape: (128, 376)
+
+        # 扩展到 (3, 128, 376) 通道
+        tensor_data = torch.from_numpy(data).float().unsqueeze(0)
+        tensor_data = tensor_data.repeat(3, 1, 1)
+
+        # 如有需要，可调整尺寸
+        tensor_data = torch.nn.functional.interpolate(
+            tensor_data.unsqueeze(0),
+            size=(128, 376),
+            mode='bilinear',
+            align_corners=False
+        ).squeeze(0)
+
+        # 根据文件夹名称生成多热编码标签
+        folder_name = os.path.basename(os.path.dirname(file_path))
+        label_vector = np.zeros(len(self.base_labels), dtype=np.float32)
+
+        if folder_name == "Silence":
+            label_vector[self.base_labels.index("Silence")] = 1.0
+        else:
+            for part in folder_name.split('_'):
+                if part in self.base_labels:
+                    label_vector[self.base_labels.index(part)] = 1.0
+
+        label_tensor = torch.from_numpy(label_vector).float()
+
+        if self.transform:
+            tensor_data = self.transform(tensor_data)
+
+        file_name = os.path.basename(file_path)
+        return tensor_data, label_tensor, file_name
+
+##############################
+# 2. 定义测试数据的预处理与 DataLoader
+##############################
+test_transform = transforms.Compose([
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])
+])
+
+test_dir = r"LX_qiege_新分类_dataset_2/test"
+testset = NumpyDatasetTestMultiLabel(test_dir, transform=test_transform)
+testloader = DataLoader(testset, batch_size=64, shuffle=False)
+
+print("测试集样本数：", len(testset))
+
+##############################
+# 3. 加载已训练的多标签模型
+##############################
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+model = models.resnet18(weights=None)
+model.fc = nn.Linear(model.fc.in_features, 5)
+model.load_state_dict(torch.load("best_model_multilabel_new5.pth", map_location=device))
+model = model.to(device)
+model.eval()
+
+##############################
+# 定义 Hamming Score 和 Hamming Loss 的计算函数
+##############################
+def compute_hamming_score(y_true, y_pred):
+    scores = []
+    for i in range(y_true.shape[0]):
+        true_set = set(np.where(y_true[i] == 1)[0])
+        pred_set = set(np.where(y_pred[i] == 1)[0])
+        if not true_set and not pred_set:
+            scores.append(1)
+        else:
+            scores.append(len(true_set & pred_set) / float(len(true_set | pred_set)))
+    return np.mean(scores)
+
+def compute_hamming_loss(y_true, y_pred):
+    return np.sum(y_true != y_pred) / y_true.size
+
+##############################
+# 4. 在测试集上计算指标并收集结果
+##############################
+all_preds = []
+all_labels = []
+all_filenames = []
+
+with torch.no_grad():
+    for inputs, labels, filenames in testloader:
+        inputs, labels = inputs.to(device), labels.to(device)
+        outputs = model(inputs)
+        probs = torch.sigmoid(outputs).cpu().numpy()
+
+        # 阈值设置
+        thresholds = {0:0.5, 1:0.5, 2:0.25, 3:0.5}
+        silence_idx = 4
+        batch_preds = []
+        for prob in probs:
+            pred = np.zeros_like(prob, dtype=int)
+            non_silence_flag = any(prob[i] >= thresholds[i] for i in thresholds)
+            if non_silence_flag:
+                for i in thresholds:
+                    pred[i] = int(prob[i] >= thresholds[i])
+                pred[silence_idx] = 0
+            elif prob[silence_idx] >= 0.5:
+                pred[silence_idx] = 1
+            else:
+                max_idx = np.argmax(prob)
+                pred[max_idx] = 1
+            batch_preds.append(pred)
+        batch_preds = np.array(batch_preds)
+
+        all_preds.append(batch_preds)
+        all_labels.append(labels.cpu().numpy())
+        all_filenames.extend(filenames)
+
+all_preds = np.vstack(all_preds)
+all_labels = np.vstack(all_labels)
+
+h_loss = compute_hamming_loss(all_labels, all_preds)
+h_score = compute_hamming_score(all_labels, all_preds)
+print(f"[多标签] Hamming Loss：{h_loss:.4f}, Hamming Score：{h_score:.4f}")
+
+# 子集准确率
+subset_acc = np.mean([np.array_equal(p, t) for p, t in zip(all_preds, all_labels)])
+print(f"[多标签] Subset Accuracy：{subset_acc:.4f}")
+
+# 每标签混淆矩阵
+base_names = ["Anthrophony", "Avain", "Insect", "Geophony", "Silence"]
+mcm = multilabel_confusion_matrix(all_labels, all_preds, labels=[0,1,2,3,4])
+plt.figure(figsize=(12,8))
+for i, name in enumerate(base_names):
+    ax = plt.subplot(3,2,i+1)
+    sns.heatmap(mcm[i], annot=True, fmt="d", cmap="Blues", ax=ax)
+    ax.set_title(name, fontname='Times New Roman', fontsize=10)
+    ax.set_xlabel("Pred", fontname='Times New Roman', fontsize=10)
+    ax.set_ylabel("True", fontname='Times New Roman', fontsize=10)
+    ax.tick_params(labelsize=10)
+    for tl in ax.get_xticklabels()+ax.get_yticklabels():
+        tl.set_fontname('Times New Roman')
+plt.tight_layout()
+plt.show()
+
+report = classification_report(all_labels, all_preds, target_names=base_names, zero_division=0, digits=3)
+print("多标签分类报告：\n", report)
+
+##############################
+# (D) 组合级混淆矩阵（英文标签）
+##############################
+# 组合映射（与原代码一致）
+combo_map = {
+    (1,0,0,0,0): "Anthrophony",
+    (0,1,0,0,0): "Avain",
+    (0,0,1,0,0): "Insect",
+    (0,0,0,1,0): "Geophony",
+    (0,0,0,0,1): "Silence",
+    (1,1,0,0,0): "Anthrophony_Avain",
+    (1,0,1,0,0): "Anthrophony_Insect",
+    (1,0,0,1,0): "Anthrophony_Geophony",
+    (0,1,1,0,0): "Avain_Insect",
+    (0,1,0,1,0): "Avain_Geophony",
+    (0,0,1,1,0): "Insect_Geophony",
+    (1,1,1,0,0): "Anthrophony_Avain_Insect"
+}
+
+def map_to_combo(vec):
+    return combo_map.get(tuple(int(x) for x in vec), "Others")
+
+mapped_preds = [map_to_combo(p) for p in all_preds]
+mapped_labels = [map_to_combo(l) for l in all_labels]
+combo_classes = list(combo_map.values()) + ["Others"]
+
+cm_combo = confusion_matrix(mapped_labels, mapped_preds, labels=combo_classes)
+row_sums = cm_combo.sum(axis=1)
+row_sums[row_sums==0] = 1
+cm_combo_pct = cm_combo.astype(float) / row_sums[:, None] * 100
+
+# 英文标签列表（顺序对应 combo_classes）
+combo_en_labels = combo_classes
+
+plt.figure(figsize=(10,8))
+
+sns.heatmap(
+    cm_combo_pct,
+    annot=True,
+    fmt=".1f",
+    cmap="Blues",
+    xticklabels=combo_en_labels,
+    yticklabels=combo_en_labels
+)
+
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
+plt.xlabel("Predicted lable", fontname='Times New Roman', fontsize=18)
+plt.ylabel("True lable", fontname='Times New Roman', fontsize=18)
+plt.tight_layout()
+plt.show()
+
+report_combo = classification_report(
+    mapped_labels,
+    mapped_preds,
+    labels=combo_classes,
+    target_names=combo_en_labels,
+    zero_division=0,
+    digits=3
+)
+print("组合级分类报告：\n", report_combo)
+
+combo_acc = np.mean([p==t for p,t in zip(mapped_preds, mapped_labels)])
+print(f"[组合级] 样本准确率：{combo_acc:.4f}")
+
+##############################
+# 5. 保存预测错误样本信息到 Excel
+##############################
+def vec_to_str(vec, names):
+    return ','.join([names[i] for i,x in enumerate(vec) if x==1])
+
+errors = []
+for fname, true_vec, pred_vec in zip(all_filenames, all_labels, all_preds):
+    if not np.array_equal(true_vec, pred_vec):
+        errors.append({
+            '文件名': fname,
+            '标注标签': vec_to_str(true_vec, base_names),
+            '预测标签': vec_to_str(pred_vec, base_names)
+        })
+
+if errors:
+    df_err = pd.DataFrame(errors)
+    df_err.to_excel('prediction_errors2.xlsx', index=False)
+    print("错误样本已保存至 prediction_errors2.xlsx")
+else:
+    print("没有预测错误的样本。")

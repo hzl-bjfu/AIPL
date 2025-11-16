@@ -1,0 +1,173 @@
+# Overwrite the README with a version tailored to the user's actual folders/files
+readme = r"""README — Code & Data Package (Tailored to Provided Folders)
+====================================================================
+Manuscript: “Non‑avian Sounds Removal Strategy for Enhancing the Performance of Acoustic Indices in Assessing Bird Vocal Activity”
+
+This package documents the 19 scripts (Python & R) and the *actual* data folders you supplied.
+It explains how the scripts map onto your directories and spreadsheets so editors/reviewers
+can verify the workflow and reproduce the main figures/tables.
+
+
+A. Reproducibility at a Glance
+------------------------------
+1) Languages & versions
+   • Python ≥ 3.10
+   • R ≥ 4.3
+
+2) Key Python packages
+   numpy, pandas, matplotlib, scipy, scikit‑learn, librosa, soundfile, pydub,
+   torch, torchvision, tqdm, openpyxl
+
+3) Key R packages
+   ggplot2, dplyr, tidyr, mgcv, lubridate, readr, showtext
+
+4) Randomness
+   • Seeds are set where relevant (PyTorch training, grid search). Some steps
+     (e.g., random split, random 20% drops in thresholding, permutation importance)
+     involve randomness; keep the default seeds to replicate numbers exactly.
+
+5) Time‑of‑day categories & weights
+   • Night [00:00–05:30) ∪ [18:30–24:00): weight 0.04
+   • Dawn  [05:30–08:00): weight 0.32
+   • Day   [08:00–16:00): weight 0.32
+   • Dusk  [16:00–18:30): weight 0.32
+
+6) Composite score used in threshold search
+   • Score = 0.9 × Norm_Corr + 0.1 × Norm_Retention
+   • Corr is the period‑weighted average absolute Spearman correlation across six indices (ACI, ADI, AEI, BIO, H, NDSI).
+
+
+B. Data Map — Your Actual Folders & Files
+-----------------------------------------
+Below is a one‑to‑one mapping from your folders/files to their roles in the workflow.
+
+Folders
+• Acoustic_indices_data/          → acoustic indices (ACI, ADI, AEI, BIO, H, NDSI).
+• LX_annotation/                  → annotation text files exported by detector/annotator (Begin/End/Tag).
+• LX_segmentation_data/           → Segmented WAV clips generated from in‑sample recordings.
+• LX_dataset/                     → model train/val/test dataset.
+• LX_out_sample_segmentation_data/ → Segmented WAV clips from the out‑of‑sample site(s).
+• LX_out_sample_numpy/            → Out‑of‑sample Mel‑spectrogram .npy features for external validation.
+• LX_out_sample_numpy_manualCheck/→ Manually checked/refined subset of the out‑of‑sample .npy features.
+• Site_soundscape_data/           → Site‑level tallies of soundscape categories by time (for correlations/GAM plots).
+• RF_data/                        → Tables for Random Forest models & spatial tests (cleaned/uncleaned, coordinates).
+
+Files at repository root
+• best_model_multilabel_new5.pth  → Trained 5‑label multi‑label ResNet‑18 model (weights).
+• Spearman correlations between acoustic indices and soundscape categories.xlsx
+                                  → Correlation result workbook (ρ and p‑values) used in figures.
+• Statistical Data on Soundscape Quantity and Acoustic Indices.xlsx
+                                  → Master table linking soundscape tallies and the six indices.
+• Summary of Threshold Iteration Results.xlsx
+                                  → Outputs from the grid search over non‑avian thresholds (normalized metrics & Score).
+
+C. Script‑by‑Script (Purpose / Inputs / Outputs)
+------------------------------------------------
+The following list mirrors the 19 scripts; paths have been adapted to your folder names.
+
+1) audio_segmentation_by_tags.txt — slice WAV by LX_annotation
+   Inputs : LX_annotation/*.txt (Begin/End/Tag), raw wav roots
+   Outputs: LX_segmentation_data/ (in‑sample), LX_out_sample_segmentation_data/ (external)
+   Notes  : Sanitizes tag strings; writes audio_segments_info.csv
+
+2) audio_augmentation.txt — optional pitch/time augmentation
+   Inputs : LX_segmentation_data/ or LX_out_sample_segmentation_data/
+   Outputs: user‑defined augmented folder
+
+3) audio_fixed4s_preprocessor.txt — produce fixed 4‑s clips
+   Inputs : segmented WAV folders (in‑sample & external)
+   Outputs: normalized 4‑s WAVs (mirroring input trees); skipped_files.xlsx
+
+4) wav_to_mel_numpy.txt — WAV→Mel→.npy
+   Inputs : normalized 4‑s WAVs
+   Outputs: LX_dataset/ (train domain), LX_out_sample_numpy/ (external domain)
+
+5) train_val_test_splitter.txt — stratified split
+   Inputs : LX_dataset/ (class/combination subfolders of .npy)
+   Outputs: LX_dataset/{train,val,test}/…, result_statistics.xlsx
+
+6) resnet18_soundscape_training.txt — train classifier
+   Inputs : LX_dataset/train, LX_dataset/val
+   Outputs: best_model_multilabel_new5.pth, logs/curves
+
+7) evaluate_in_sample_test.txt — evaluate on in‑sample test
+   Inputs : LX_dataset/test, best_model_multilabel_new5.pth
+   Outputs: metrics, confusion matrices, prediction_errors2.xlsx
+
+8) evaluate_out_sample_test.txt — external validation
+   Inputs : LX_out_sample_numpy/ (or LX_out_sample_numpy_manualCheck/), model weights
+   Outputs: metrics and error sheets
+
+9) count_full_labels.txt — optional label counts
+   Inputs : prediction Excel files
+   Outputs: aggregated counts workbook
+
+10) compute_spearman_correlation.txt — ρ & p‑values
+    Inputs : Statistical Data on Soundscape Quantity and Acoustic Indices.xlsx
+             (or tables assembled from Site_soundscape_data + Acoustic_indices_data)
+    Outputs: Spearman correlations between acoustic indices and soundscape categories.xlsx
+
+11) soundscape_acoustic_corr_heatmap_strategies.txt — heatmaps
+    Inputs : correlation workbook
+    Outputs: figures under results/figures
+
+12) removal_rate_barplot_by_period.txt — barplots
+    Inputs : Summary of Threshold Iteration Results.xlsx
+    Outputs: figures under results/figures
+
+13) acoustic_index_correlation_lollipop.txt — lollipop plots
+    Inputs : final correlation table (post‑removal)
+    Outputs: figures under results/figures
+
+14) non_avian_removal_threshold_calc.txt — grid search
+    Inputs : Site_soundscape_data + Acoustic_indices_data
+    Outputs: Summary of Threshold Iteration Results.xlsx (normalized metrics + Score)
+
+15) non_avian_threshold_removed.txt — apply thresholds
+    Inputs : chosen thresholds + tallies/indices
+    Outputs: cleaned data tables (e.g., under RF_data/)
+
+16) RF_first_model_with_SpatialAuto.txt — cleaned RF
+    Inputs : RF_data/ (cleaned feature table + coordinates)
+    Outputs: grid search results, TestMetrics, PermImp, SpatialAuto
+
+17) RF_second_model_with_SpatialAuto.txt — baseline RF
+    Inputs : RF_data/ (uncleaned feature table + coordinates)
+    Outputs: analogous to #16
+
+18) RF_importanceRanking_ΔMSE.txt — ΔMSE bars
+    Inputs : RF_data/ (feature importance table) or results from #16/#17
+    Outputs: ΔMSE horizontal bar chart(s)
+
+19) R code 3.gam_fitting_five_soundscapes.txt — mgcv GAM
+    Inputs : Site_soundscape_data/
+    Outputs: 24‑h cyclic spline curves per category
+
+
+D. Typical Outputs (where to find them)
+---------------------------------------
+• Figures → results/figures (correlation heatmaps, removal barplots, lollipop plots, RF ΔMSE, GAM curves).
+• RF results → results/rf_outputs (grid search, metrics, importance, Moran’s I summary).
+• Correlation workbook → Spearman correlations between acoustic indices and soundscape categories.xlsx.
+• Threshold search → Summary of Threshold Iteration Results.xlsx.
+• Model weights → best_model_multilabel_new5.pth.
+
+
+E. Notes & Customization
+------------------------
+• Paths: All scripts define paths near the top or in `__main__`. They are set here to match
+  the folders you provided (LX_* and *_data). Adjust only if you relocate data.
+• Sampling rate: Mel extraction defaults to 48 kHz. Resample consistently if needed.
+• Class schema: Base labels are Anthrophony, Avian, Insect, Geophony, Silence. Combinations are handled
+  via folder names. If your schema differs in LX_dataset, edit the allowed label list in scripts #5–#8.
+• Spatial test: Moran’s I uses k‑NN (k=6) and 999 permutations; coordinates expected in RF_data.
+• Excel locale: All analysis scripts read `.xlsx` with UTF‑8 sheet names; avoid special characters in headers.
+
+
+F. Contact
+----------
+For questions on code organization or replication, please contact the corresponding author of the manuscript.
+"""
+
+with open("/mnt/data/readme.txt", "w", encoding="utf-8") as f:
+    f.write(readme)

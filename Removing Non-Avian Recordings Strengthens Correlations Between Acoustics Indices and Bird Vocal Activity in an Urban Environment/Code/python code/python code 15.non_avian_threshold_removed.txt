@@ -1,0 +1,129 @@
+# 根据选择的平衡点数据清洗 （14，15，1）python code 15.non_avian_threshold_removed
+
+import os
+import re
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import matplotlib.pyplot as plt
+from tqdm import tqdm  # 导入 tqdm 进度条库
+
+# -------------------------------
+# 设置 matplotlib 使用中文宋体（SimSun），可根据需要调整
+# -------------------------------
+plt.rcParams['font.sans-serif'] = ['SimSun']
+plt.rcParams['axes.unicode_minus'] = False
+
+# -------------------------------
+# 参数设置
+# -------------------------------
+drop_prob = 0.2  # 非夜间数据违反严格条件时，随机剔除的概率，即有20%的概率剔除该行
+
+# -------------------------------
+# 1. 数据读取（xlsx格式）
+# -------------------------------
+xlsx_file = r"E:\voice_data\统计分析\随机森林_3\声景类型原数据\随机森林数据.xlsx"  # 修改为你的Excel文件路径
+df = pd.read_excel(xlsx_file)
+
+# -------------------------------
+# 2. 从“Big Audio”列中提取时间信息
+# -------------------------------
+df['filename'] = df['Big Audio'].apply(os.path.basename)
+
+def extract_datetime_str(filename):
+    """
+    假设文件名格式中含有：_YYYYMMDD_HHMM 或 _YYYYMMDD_HHMMSS
+    例如：LXA005_20230923_133002 或 LXA005_20230923_0000
+    如果时间部分只有4位，则自动补“00”作为秒数；
+    返回 "20230923133002" 或 "20230923000000"
+    """
+    match = re.search(r'.*_(\d{8})_(\d{4,6})', filename)
+    if match:
+        date_part = match.group(1)
+        time_part = match.group(2)
+        if len(time_part) == 4:
+            time_part = time_part + "00"
+        return date_part + time_part
+    return None
+
+df['datetime_str'] = df['filename'].apply(extract_datetime_str)
+df['datetime_full'] = pd.to_datetime(df['datetime_str'], format="%Y%m%d%H%M%S", errors='coerce')
+df['hour_decimal'] = df['datetime_full'].dt.hour + df['datetime_full'].dt.minute / 60.0
+
+# -------------------------------
+# 3. 根据自定义时间段分类
+# -------------------------------
+def get_time_category(hour_decimal):
+    """
+    自定义时间段：
+      - 夜间: 0:00 – 5:30 及 18:30 – 24:00，即 [0,5.5) ∪ [18.5,24)
+      - 黎明: 5:30 – 8:00，即 [5.5,8)
+      - 白天: 8:00 – 16:00，即 [8,16)
+      - 黄昏: 16:00 – 18:30，即 [16,18.5)
+      - 其它：未知
+    """
+    if pd.isna(hour_decimal):
+        return "未知"
+    if (hour_decimal >= 0 and hour_decimal < 5.5) or (hour_decimal >= 18.5 and hour_decimal < 24):
+        return "夜间"
+    elif hour_decimal >= 5.5 and hour_decimal < 8:
+        return "黎明"
+    elif hour_decimal >= 8 and hour_decimal < 16:
+        return "白天"
+    elif hour_decimal >= 16 and hour_decimal < 18.5:
+        return "黄昏"
+    else:
+        return "未知"
+
+df['time_cat'] = df['hour_decimal'].apply(get_time_category)
+
+# -------------------------------
+# 4. 统计原始数据总行数及各时间段行数
+# -------------------------------
+total_original = len(df)
+time_cats = ['夜间', '黎明', '白天', '黄昏']
+original_time_counts = {tcat: df[df['time_cat'] == tcat].shape[0] for tcat in time_cats}
+
+# -------------------------------
+# 5. 固定阈值设置
+# -------------------------------
+anthro_thresh = 14  # 人声阈值
+insect_thresh = 15   # 虫声阈值
+geophony_thresh = 1  # 地理声阈值
+
+# -------------------------------
+# 6. 数据过滤（清洗）
+# -------------------------------
+
+# 对夜间数据采用严格过滤
+df_night = df[df['time_cat'] == '夜间']
+df_night_filtered = df_night[(df_night["Anthrophony"] < anthro_thresh) &
+                             (df_night["Insect Sum"] < insect_thresh) &
+                             (df_night["Geophony Sum"] < geophony_thresh)]
+
+# 对非夜间数据采用随机剔除策略
+df_non_night = df[df['time_cat'] != '夜间']
+# 先筛选出满足严格条件的行
+strict_mask = (df_non_night["Anthrophony"] < anthro_thresh) & \
+              (df_non_night["Insect Sum"] < insect_thresh) & \
+              (df_non_night["Geophony Sum"] < geophony_thresh)
+df_non_night_keep = df_non_night[strict_mask]
+# 对违反严格条件的行，随机剔除部分（以 drop_prob 的概率剔除）
+df_non_night_violating = df_non_night[~strict_mask]
+rand_vals = np.random.rand(len(df_non_night_violating))
+non_drop_mask = rand_vals > drop_prob  # 保留比例为 (1 - drop_prob)
+df_non_night_filtered = df_non_night_violating[non_drop_mask]
+# 合并严格条件保留和随机保留的行
+df_non_night_filtered = pd.concat([df_non_night_keep, df_non_night_filtered])
+
+# 合并夜间与非夜间过滤结果，得到清洗后的数据
+df_cleaned = pd.concat([df_night_filtered, df_non_night_filtered])
+
+# 输出结果信息
+print("原始数据行数:", total_original)
+print("清洗后数据行数:", len(df_cleaned))
+
+# 可选：将清洗后的数据保存到新的 Excel 文件
+output_file = r"E:\voice_data\统计分析\随机森林_4\声景类型原数据\随机森林数据_清洗.xlsx"
+df_cleaned.to_excel(output_file, index=False)
+print(f"清洗结果已保存到：{output_file}")
