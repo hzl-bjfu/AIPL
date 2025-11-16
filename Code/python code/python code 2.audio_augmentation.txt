@@ -1,0 +1,90 @@
+# python code 2.audio_augmentation 数据增强 时间拉伸 音高变化 不噪声添加（跳过1.0秒以下的音频，直接导出，不进行处理）（用这个）
+import librosa
+import soundfile as sf
+import os
+import random
+
+# 检测音频长度并标记短音频
+def check_audio_length(file_path, sr=48000):
+    audio, sample_rate = librosa.load(file_path, sr=sr)
+    duration = librosa.get_duration(y=audio, sr=sample_rate)
+    return audio, sample_rate, duration
+
+# 载入音频文件
+def load_audio_file(file_path, sr=None):
+    audio, sample_rate = librosa.load(file_path, sr=sr)
+    return audio, sample_rate
+
+# 随机时间拉伸（因子范围 0.9 - 1.1）
+def time_stretch(audio):
+    if len(audio) < 16:
+        return audio, 1.0  # 跳过过短音频
+    stretch_factor = random.uniform(0.9, 1.1)
+    return librosa.effects.time_stretch(audio, rate=stretch_factor), stretch_factor
+
+# 音高变化（±5% 以内的随机滚动）
+def pitch_shift(audio, sample_rate):
+    if len(audio) < 16:
+        return audio, 0.0  # 跳过过短音频
+    n_steps = random.uniform(-0.6, 0.6)
+    return librosa.effects.pitch_shift(audio, sr=sample_rate, n_steps=n_steps), n_steps
+
+# 保存音频
+def save_audio(file_path, audio, sample_rate):
+    sf.write(file_path, audio, sample_rate)
+
+# 处理单个音频文件
+def process_audio_file(input_path, output_path):
+    try:
+        # 加载音频并检测长度
+        audio, sample_rate, duration = check_audio_length(input_path)
+
+        if duration < 1.0:
+            print(f"Skipping short audio (less than 1s): {input_path} (duration: {duration:.2f}s)")
+            os.makedirs(output_path, exist_ok=True)
+            sf.write(os.path.join(output_path, os.path.basename(input_path)), audio, sample_rate)
+            return
+
+        # 数据增强处理
+        stretched_audio, stretch_factor = time_stretch(audio)
+        shifted_audio, shift_steps = pitch_shift(audio, sample_rate)
+
+        # 生成输出文件名
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        output_files = {
+            "stretched": os.path.join(output_path, f"{base_name}_stretched_{stretch_factor:.2f}.wav"),
+            "shifted": os.path.join(output_path, f"{base_name}_shifted_{shift_steps:.2f}.wav"),
+        }
+
+        # 确保输出目录存在
+        os.makedirs(output_path, exist_ok=True)
+
+        # 保存增强后的音频
+        save_audio(output_files["stretched"], stretched_audio, sample_rate)
+        save_audio(output_files["shifted"], shifted_audio, sample_rate)
+
+        print(f"Processed: {input_path} -> {output_path}")
+
+    except Exception as e:
+        print(f"Error processing {input_path}: {e}")
+
+# 遍历输入文件夹并处理音频
+def process_audio_folder(input_folder, output_folder):
+    for root, _, files in os.walk(input_folder):
+        for file in files:
+            if file.lower().endswith((".wav", ".mp3", ".flac")):
+                input_path = os.path.join(root, file)
+
+                # 计算输出目录，保持目录结构
+                relative_path = os.path.relpath(root, input_folder)
+                output_path = os.path.join(output_folder, relative_path)
+
+                # 处理音频文件
+                process_audio_file(input_path, output_path)
+
+# 指定输入和输出文件夹路径
+input_folder = "E:/voice_data/Beijing/DiTan_Aqiege"  # 修改为你的输入文件夹路径
+output_folder = "E:/voice_data/Beijing/DiTan_A_augmentation"  # 修改为你的输出文件夹路径
+
+# 开始处理
+process_audio_folder(input_folder, output_folder)
